@@ -1,0 +1,56 @@
+# Android
+*.iml
+.gradle
+/local.properties
+/.idea
+.DS_Store
+/build
+/captures
+.externalNativeBuild
+.cxx
+*.keystore
+!debug.keystore
+
+# PlatformIO / Arduino
+firmware/.pio
+firmware/.pioenvs
+firmware/.piolibdeps
+firmware/**/.pio
+*.o
+*.d
+*.a
+*.elf
+*.bin
+*.hex
+*.map
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+.env
+venv/
+
+# ML models (too large for git — use Git LFS or releases)
+*.tflite
+*.pb
+*.h5
+*.onnx
+
+# Secrets
+local.properties
+keystore.properties
+secrets.properties
