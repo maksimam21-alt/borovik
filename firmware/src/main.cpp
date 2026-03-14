@@ -1,79 +1,130 @@
 #include <Arduino.h>
-#include <TFT_eSPI.h>
+#include <SPI.h>
 
-TFT_eSPI tft = TFT_eSPI();  // Создаём объект дисплея
+// Пины
+#define TFT_SCLK 12
+#define TFT_MOSI 11
+#define TFT_CS   8
+#define TFT_DC   9
+#define TFT_RST  10
+
+#define TFT_WIDTH  170
+#define TFT_HEIGHT 320
+
+SPIClass spi(HSPI);
+
+void tft_cmd(uint8_t cmd) {
+  digitalWrite(TFT_DC, LOW);
+  digitalWrite(TFT_CS, LOW);
+  spi.transfer(cmd);
+  digitalWrite(TFT_CS, HIGH);
+}
+
+void tft_data(uint8_t dat) {
+  digitalWrite(TFT_DC, HIGH);
+  digitalWrite(TFT_CS, LOW);
+  spi.transfer(dat);
+  digitalWrite(TFT_CS, HIGH);
+}
+
+void tft_init() {
+  pinMode(TFT_CS,  OUTPUT); digitalWrite(TFT_CS, HIGH);
+  pinMode(TFT_DC,  OUTPUT); digitalWrite(TFT_DC, HIGH);
+  pinMode(TFT_RST, OUTPUT);
+
+  // Hard reset
+  digitalWrite(TFT_RST, HIGH); delay(50);
+  digitalWrite(TFT_RST, LOW);  delay(20);
+  digitalWrite(TFT_RST, HIGH); delay(150);
+
+  // Software reset
+  tft_cmd(0x01); delay(150);
+  // Sleep out
+  tft_cmd(0x11); delay(255);
+
+  // Colour mode: 16-bit
+  tft_cmd(0x3A); tft_data(0x55);
+
+  // MADCTL: RGB, top-left origin
+  tft_cmd(0x36); tft_data(0x00);
+
+  // Column addr set: 35..204 (170px centred in 240px controller)
+  tft_cmd(0x2A);
+  tft_data(0x00); tft_data(35);
+  tft_data(0x00); tft_data(35 + TFT_WIDTH - 1);
+
+  // Row addr set: 0..319
+  tft_cmd(0x2B);
+  tft_data(0x00); tft_data(0x00);
+  tft_data(0x01); tft_data(0x3F);
+
+  // Inversion ON (needed for most ST7789 1.9" modules)
+  tft_cmd(0x21);
+
+  // Display ON
+  tft_cmd(0x29); delay(50);
+}
+
+void tft_set_window(uint16_t x0, uint16_t y0, uint16_t x1, uint16_t y1) {
+  x0 += 35; x1 += 35;  // col offset
+  tft_cmd(0x2A);
+  tft_data(x0 >> 8); tft_data(x0 & 0xFF);
+  tft_data(x1 >> 8); tft_data(x1 & 0xFF);
+  tft_cmd(0x2B);
+  tft_data(y0 >> 8); tft_data(y0 & 0xFF);
+  tft_data(y1 >> 8); tft_data(y1 & 0xFF);
+  tft_cmd(0x2C);
+}
+
+void tft_fill(uint16_t color) {
+  tft_set_window(0, 0, TFT_WIDTH - 1, TFT_HEIGHT - 1);
+  digitalWrite(TFT_DC, HIGH);
+  digitalWrite(TFT_CS, LOW);
+  uint32_t total = (uint32_t)TFT_WIDTH * TFT_HEIGHT;
+  for (uint32_t i = 0; i < total; i++) {
+    spi.transfer16(color);
+  }
+  digitalWrite(TFT_CS, HIGH);
+}
+
+// RGB565 colors
+#define C_BLACK  0x0000
+#define C_RED    0xF800
+#define C_GREEN  0x07E0
+#define C_BLUE   0x001F
+#define C_WHITE  0xFFFF
+#define C_CYAN   0x07FF
+#define C_YELLOW 0xFFE0
+
+void setRGB(uint8_t r, uint8_t g, uint8_t b) {
+  neopixelWrite(48, r, g, b);
+}
 
 void setup() {
   Serial.begin(115200);
-  Serial.println("Borovik display test");
+  delay(500);
+  Serial.println("Raw SPI ST7789 1.9 test");
 
-  // Инициализация дисплея
-  tft.init();
-  tft.setRotation(0);  // 0=portrait, 1=landscape, 2=portrait flip, 3=landscape flip
+  setRGB(20, 0, 0); delay(200);
+  setRGB(0, 0, 0);
 
-  // === ТЕСТ 1: Заливка цветом ===
-  // Проверяет что дисплей вообще работает
-  tft.fillScreen(TFT_BLACK);
-  delay(300);
-  tft.fillScreen(TFT_RED);
-  delay(300);
-  tft.fillScreen(TFT_GREEN);
-  delay(300);
-  tft.fillScreen(TFT_BLUE);
-  delay(300);
-  tft.fillScreen(TFT_BLACK);
+  spi.begin(TFT_SCLK, -1, TFT_MOSI, TFT_CS);
+  spi.setFrequency(27000000);
 
-  // === ТЕСТ 2: Текст ===
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);  // цвет текста, фон
-  tft.setTextSize(2);
-  tft.setCursor(10, 10);
-  tft.println("BOROVIK v0.1");
+  tft_init();
+  Serial.println("Init done");
 
-  tft.setTextColor(TFT_GREEN, TFT_BLACK);
-  tft.setTextSize(1);
-  tft.setCursor(10, 40);
-  tft.println("ESP32-S3 + ST7789 2.4\"");
-  tft.setCursor(10, 55);
-  tft.println("Display: OK");
+  tft_fill(C_RED);   setRGB(20,0,0); delay(500); Serial.println("RED");
+  tft_fill(C_GREEN); setRGB(0,20,0); delay(500); Serial.println("GREEN");
+  tft_fill(C_BLUE);  setRGB(0,0,20); delay(500); Serial.println("BLUE");
+  tft_fill(C_WHITE); setRGB(10,10,10); delay(500); Serial.println("WHITE");
+  tft_fill(C_BLACK); setRGB(0,0,0);
 
-  // === ТЕСТ 3: Геометрия ===
-  // Прямоугольник
-  tft.drawRect(10, 80, 100, 50, TFT_YELLOW);
-  tft.fillRect(15, 85, 90, 40, TFT_DARKGREY);
-
-  // Круг
-  tft.fillCircle(180, 105, 30, TFT_CYAN);
-  tft.drawCircle(180, 105, 30, TFT_WHITE);
-
-  // Линия
-  tft.drawLine(10, 145, 230, 145, TFT_RED);
-
-  // === ТЕСТ 4: Боровик-заглушка (текстовый "гриб") ===
-  tft.setTextColor(TFT_WHITE, TFT_BLACK);
-  tft.setTextSize(1);
-  tft.setCursor(10, 160);
-  tft.println("Найден гриб:");
-  tft.setTextColor(TFT_GREEN, TFT_BLACK);
-  tft.setTextSize(2);
-  tft.setCursor(10, 175);
-  tft.println("Borovik");
-  tft.setTextColor(TFT_YELLOW, TFT_BLACK);
-  tft.setTextSize(1);
-  tft.setCursor(10, 200);
-  tft.println("Lat: 60.1699");
-  tft.setCursor(10, 215);
-  tft.println("Lon: 24.9384");
-  tft.setTextColor(TFT_CYAN, TFT_BLACK);
-  tft.setCursor(10, 235);
-  tft.println("Confidence: 94%");
-
-  Serial.println("Display test done!");
+  Serial.println("Done!");
 }
 
 void loop() {
-  // Мигаем рамкой чтобы видеть что цикл работает
-  tft.drawRect(5, 5, 230, 310, TFT_WHITE);
-  delay(500);
-  tft.drawRect(5, 5, 230, 310, TFT_BLACK);
-  delay(500);
+  setRGB(0, 8, 0); delay(500);
+  setRGB(0, 0, 0); delay(500);
+  Serial.println("ALIVE");
 }
